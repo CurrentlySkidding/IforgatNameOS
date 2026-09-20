@@ -145,8 +145,8 @@ if not listing then
 end
 
 local files = {}
-for line in (listing .. "\n"):gmatch("([^\n]*)\n") do
-  line = line:gsub("%s+$", "")
+for raw in (listing .. "\n"):gmatch("([^\n]*)\n") do
+  local line = raw:gsub("[%s\r]+$", "")
   if line ~= "" and line:sub(1, 1) ~= "#" then files[#files + 1] = line end
 end
 
