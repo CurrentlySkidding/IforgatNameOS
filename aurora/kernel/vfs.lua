@@ -26,7 +26,6 @@ vfs.types = {
   asheet = { kind = "sheet", label = "Aurora sheet", app = "sheets",  colour = colours.green,     char = "\254" },
   csv  = { kind = "sheet", label = "CSV table",      app = "sheets",  colour = colours.lime,      char = "\254" },
   adeck = { kind = "slides", label = "Aurora deck",  app = "slides",  colour = colours.orange,    char = "\254" },
-  aapp = { kind = "code",  label = "Aurora project", app = "builder", colour = colours.magenta,   char = "\254" },
   cfg  = { kind = "text",  label = "Configuration",  app = "editor",  colour = colours.yellow,    char = "\171" },
   json = { kind = "text",  label = "JSON data",      app = "editor",  colour = colours.yellow,    char = "\171" },
   log  = { kind = "text",  label = "Log file",       app = "editor",  colour = colours.lightGrey, char = "\171" },

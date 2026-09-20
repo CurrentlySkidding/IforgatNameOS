@@ -43,7 +43,7 @@ do
   sidebar:setRows(rows)
 end
 local sidebarScroller = base.Scrolled({ background = theme.c.window })
-sidebarScroller.widthRequest = 13
+sidebarScroller.widthRequest = 11
 sidebarScroller.vexpand = true
 sidebarScroller:setChild(sidebar)
 

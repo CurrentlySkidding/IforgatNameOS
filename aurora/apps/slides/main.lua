@@ -130,7 +130,7 @@ end
 local slideList = W.ListBox({ rows = {}, showSubtitles = false })
 slideList.vexpand = true
 local listScroller = base.Scrolled({ background = theme.c.window })
-listScroller.widthRequest = 14
+listScroller.widthRequest = 10
 listScroller.vexpand = true
 listScroller:setChild(slideList)
 

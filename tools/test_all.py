@@ -45,7 +45,7 @@ end
 """
 
 APPS = ["files", "terminal", "editor", "writer", "sheets", "slides",
-        "builder", "settings", "calc", "monitor"]
+        "settings", "calc", "monitor"]
 
 
 class Case:
@@ -404,8 +404,8 @@ def test_open_file_from_files():
     return problems
 
 
-def test_publish_user_app():
-    case = Case("publish app")
+def test_install_user_app():
+    case = Case("user app")
     probe = case.lua.eval(b"""
       function(env)
         local apps = env.arequire("svc.apps")
@@ -413,7 +413,7 @@ def test_publish_user_app():
           'local App = arequire("ui.app")',
           'local W = arequire("ui.widgets")',
           'local app = App({ title = "Demo" })',
-          'app:setRoot(W.Label({ text = "made by the builder" }))',
+          'app:setRoot(W.Label({ text = "a third-party app" }))',
           'app:run()',
         }, string.char(10))
         local dir, err = apps.createUserApp("demo", {
@@ -424,7 +424,7 @@ def test_publish_user_app():
         if not dir then return "createUserApp failed: " .. tostring(err) end
         if not apps.get("demo") then return "app did not register" end
         local proc = apps.launch("demo")
-        if not proc then return "published app would not launch" end
+        if not proc then return "the installed app would not launch" end
         return ""
       end
     """)
@@ -461,32 +461,6 @@ def test_theme_switching():
     return problems
 
 
-def test_builder_generates_valid_lua():
-    case = Case("builder codegen")
-    case.launch(case.machine.env, b"builder")
-    case.machine.pump(800)
-    problems = case.errors()
-    # The builder writes its preview file when you press Run (F5).
-    case.run_script([(b"key", 63, False), (b"key_up", 63)])
-    problems.extend(case.errors())
-    probe = case.lua.eval(b"""
-      function(env)
-        local path = "aurora/var/builder-preview/main.lua"
-        if not env.fs.exists(path) then return "preview file was not written" end
-        local h = env.fs.open(path, "r")
-        local src = h.readAll()
-        h.close()
-        local chunk, err = load(src, "@preview", "t", {})
-        if not chunk then return "generated code does not compile: " .. tostring(err) end
-        return ""
-      end
-    """)
-    message = probe(case.machine.env).decode()
-    if message:
-        problems.append(message)
-    return problems
-
-
 def main():
     passed = True
     passed &= check("boot", test_boot)
@@ -504,9 +478,8 @@ def main():
     passed &= check("menus and modal dialogs", test_dialogs_and_menus)
     passed &= check("printing with pagination", test_printing)
     passed &= check("open a file from Files", test_open_file_from_files)
-    passed &= check("publish an app from the builder", test_publish_user_app)
+    passed &= check("install a third-party app", test_install_user_app)
     passed &= check("theme and wallpaper switching", test_theme_switching)
-    passed &= check("builder code generation", test_builder_generates_valid_lua)
     print()
     print("ALL PASSED" if passed else "FAILURES")
     return 0 if passed else 1

@@ -30,20 +30,23 @@ local state = {
 local pathLabel = W.Label({ text = "", dim = false })
 pathLabel.hexpand = true
 
+local placesButton = W.IconButton({ icon = "\127", width = 3 })
 local backButton = W.IconButton({ icon = "\17", width = 3 })
 local upButton = W.IconButton({ icon = "\30", width = 3 })
-local viewButton = W.IconButton({ icon = "\254", width = 3 })
 local menuButton = W.IconButton({ icon = "\7", width = 3 })
 
 local toolbar = W.Toolbar({ spacing = 0 })
+toolbar:add(placesButton)
 toolbar:add(backButton)
 toolbar:add(upButton)
 toolbar:add(pathLabel)
-toolbar:add(viewButton)
 toolbar:add(menuButton)
 
 --------------------------------------------------------------- side panel --
 
+-- The places list used to sit open permanently, costing a quarter of the
+-- window's width.  It is a toggle now (the house button, or Ctrl+B) so the
+-- file list gets the whole window by default.
 local placesList = W.ListBox({ rows = {}, background = theme.c.window })
 placesList.vexpand = true
 
@@ -51,6 +54,10 @@ local sidebar = base.Scrolled({ background = theme.c.window })
 sidebar.widthRequest = 13
 sidebar.vexpand = true
 sidebar:setChild(placesList)
+sidebar.visible = false
+
+local sidebarSeparator = W.Separator({ orientation = "vertical" })
+sidebarSeparator.visible = false
 
 ----------------------------------------------------------------- content ---
 
@@ -82,25 +89,16 @@ contentStack:addPage("list", listScroller)
 contentStack:addPage("grid", gridScroller)
 contentStack:addPage("empty", emptyState)
 
-local statusLabel = W.Label({ text = "", dim = true })
-statusLabel.hexpand = true
-
 local body = base.Box({ orientation = "horizontal", spacing = 0 })
 body.hexpand, body.vexpand = true, true
 body:add(sidebar)
-body:add(W.Separator({ orientation = "vertical" }))
+body:add(sidebarSeparator)
 body:add(contentStack)
-
-local statusBar = base.Box({ orientation = "horizontal", spacing = 1, padding = 0 })
-statusBar.hexpand = true
-statusBar.background = theme.c.window
-statusBar:add(statusLabel)
 
 local root = base.Box({ orientation = "vertical", spacing = 0 })
 root.hexpand, root.vexpand = true, true
 root:add(toolbar)
 root:add(body)
-root:add(statusBar)
 app:setRoot(root)
 
 ------------------------------------------------------------------ helpers --
@@ -155,16 +153,13 @@ local function refresh()
     contentStack:setPage(state.view)
   end
 
-  pathLabel:setText(" " .. util.ellipsis(state.path == "" and "/" or state.path, 26))
+  local shown = state.path == "" and "/" or state.path
+  if util.startsWith(shown, vfs.HOME) then
+    shown = "~" .. shown:sub(#vfs.HOME + 1)
+  end
+  pathLabel:setText(" " .. util.ellipsis(shown, 28))
   aurora.setTitle(state.path == vfs.HOME and "Home" or fs.getName(state.path))
 
-  local usage = vfs.usage()
-  local folders, files = 0, 0
-  for _, entry in ipairs(state.entries) do
-    if entry.isDir then folders = folders + 1 else files = files + 1 end
-  end
-  statusLabel:setText((" %d folders, %d files  \183  %s free")
-    :format(folders, files, util.formatSize(usage.free)))
 
   backButton.sensitive = #state.history > 0
   upButton.sensitive = state.path ~= "/"
@@ -316,32 +311,38 @@ end
 
 local function openMenu()
   local entry = selectedEntry()
-  app:menu(app.surface.w - 24, 2, {
-    { label = "New folder", icon = "\254", action = newFolder, accel = "^N" },
-    { label = "New file", icon = "\171", action = newFile },
+  local inTrash = util.startsWith(state.path, vfs.TRASH)
+  local items = {
+    { label = "New folder", icon = "¬", action = newFolder, accel = "^N" },
     { separator = true },
-    { label = "Copy", icon = "\4", action = function() copySelected("copy") end,
-      accel = "^C", disabled = entry == nil },
-    { label = "Cut", icon = "\4", action = function() copySelected("cut") end,
-      accel = "^X", disabled = entry == nil },
-    { label = "Paste", icon = "\4", action = pasteHere, accel = "^V" },
+    { label = "Copy", icon = "", accel = "^C", disabled = entry == nil,
+      action = function() copySelected("copy") end },
+    { label = "Paste", icon = "", accel = "^V", action = pasteHere },
+    { label = "Rename", icon = "87", accel = "F2", disabled = entry == nil,
+      action = renameSelected },
+    { label = inTrash and "Delete" or "Move to Trash", icon = "",
+      destructive = true, disabled = entry == nil, action = deleteSelected },
     { separator = true },
-    { label = "Rename", icon = "\187", action = renameSelected, disabled = entry == nil },
-    { label = "Properties", icon = "\4", action = showProperties, disabled = entry == nil },
-    { label = "Print", icon = "\22", disabled = entry == nil or (entry and entry.isDir),
-      action = function()
-        if not entry then return end
-        local job, err = printer.printFile(entry.path)
-        if job then app:notify("Sent " .. entry.name .. " to the printer", "success")
-        else app:notify(err or "Print failed", "error") end
-      end },
-    { separator = true },
-    { label = state.showHidden and "Hide hidden files" or "Show hidden files",
-      icon = "\7", action = function()
-        state.showHidden = not state.showHidden
+    { label = state.view == "list" and "View as grid" or "View as list",
+      icon = "¬", action = function()
+        state.view = state.view == "list" and "grid" or "list"
         refresh()
       end },
-    { label = "Empty trash", icon = "\233", destructive = true, action = function()
+    { label = "Properties", icon = "", disabled = entry == nil,
+      action = showProperties },
+  }
+
+  -- Contextual extras, so they are only in the way when they are useful.
+  if entry and not entry.isDir then
+    table.insert(items, { label = "Print", icon = "", action = function()
+      local job, err = printer.printFile(entry.path)
+      if job then app:notify("Sent " .. entry.name .. " to the printer", "success")
+      else app:notify(err or "Print failed", "error") end
+    end })
+  end
+  if inTrash then
+    table.insert(items, { label = "Empty trash", icon = "", destructive = true,
+      action = function()
         app:confirm({
           title = "Empty the trash?",
           message = "Everything in the trash will be deleted permanently.",
@@ -353,8 +354,10 @@ local function openMenu()
             refresh()
           end,
         })
-      end },
-  }, 24)
+      end })
+  end
+
+  app:menu(app.surface.w - 22, 2, items, 22)
 end
 
 ------------------------------------------------------------------- wiring --
@@ -362,11 +365,13 @@ end
 backButton:connect("clicked", goBack)
 upButton:connect("clicked", function() navigate(vfs.parent(state.path)) end)
 menuButton:connect("clicked", openMenu)
-viewButton:connect("clicked", function()
-  state.view = state.view == "list" and "grid" or "list"
-  viewButton.icon = state.view == "list" and "\254" or "\171"
-  refresh()
-end)
+local function toggleSidebar()
+  sidebar.visible = not sidebar.visible
+  sidebarSeparator.visible = sidebar.visible
+  app:queueLayout()
+end
+
+placesButton:connect("clicked", toggleSidebar)
 
 placesList:connect("select", function(_, index, row)
   if row and row.value then navigate(row.value) end
@@ -386,6 +391,7 @@ app:accel("ctrl+n", newFolder)
 app:accel("ctrl+c", function() copySelected("copy") end)
 app:accel("ctrl+x", function() copySelected("cut") end)
 app:accel("ctrl+v", pasteHere)
+app:accel("ctrl+b", toggleSidebar)
 app:accel("ctrl+h", function() state.showHidden = not state.showHidden refresh() end)
 app:accel("ctrl+l", function()
   app:prompt({

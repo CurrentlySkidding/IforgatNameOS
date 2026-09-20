@@ -360,6 +360,13 @@ end
 
 --------------------------------------------------------------- geometry -----
 
+--- Two levels of damage, because they cost wildly different amounts.
+---
+--- `damage` means "this window redrew its own contents" -- nothing moved, so
+--- the shell can blit that one buffer and skip the wallpaper and every other
+--- window.  `damageAll` means the layout itself changed (a window moved,
+--- resized, gained focus, opened or closed) and the whole desktop has to be
+--- recomposited.  Typing a character takes the first path.
 function sched.damage(proc)
   proc.dirty = true
   sched.dirty = true
@@ -368,6 +375,7 @@ end
 
 function sched.damageAll()
   sched.dirty = true
+  sched.fullRedraw = true
   for _, proc in ipairs(sched.procs) do proc.dirty = true end
 end
 

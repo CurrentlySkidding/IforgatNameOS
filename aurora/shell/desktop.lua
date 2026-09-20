@@ -30,7 +30,7 @@ desktop.searchIndex = 1
 desktop.notifications = {}
 desktop.drag = nil
 desktop.switcher = nil
-desktop.powerMenu = false
+desktop.menu = nil
 desktop.hover = { control = nil, proc = nil }
 desktop.dashSelection = 1
 desktop.gridSelection = 1
@@ -57,13 +57,21 @@ end
 
 ------------------------------------------------------------ notifications ---
 
+--- Mark the whole desktop as needing a repaint.  Anything that changes the
+--- layout -- overlays opening or closing, windows moving, focus changing --
+--- goes through here rather than touching sched.dirty directly.
+function desktop.invalidate()
+  sched.dirty = true
+  sched.fullRedraw = true
+end
+
 function desktop.notify(title, body, kind)
   table.insert(desktop.notifications, 1, {
     title = title, body = body, kind = kind or "info",
     expires = os.clock() + (kind == "error" and 8 or 5),
   })
   while #desktop.notifications > 4 do table.remove(desktop.notifications) end
-  sched.dirty = true
+  desktop.invalidate()
 end
 
 local function expireNotifications()
@@ -75,7 +83,7 @@ local function expireNotifications()
       changed = true
     end
   end
-  if changed then sched.dirty = true end
+  if changed then desktop.invalidate() end
 end
 
 ------------------------------------------------------------------- panel ----
@@ -112,10 +120,7 @@ function desktop.drawPanel(s, d)
   desktop.activitiesRect = { x = 1, w = #label + 4 }
 
   -- clock, centred
-  local clock = util.clock()
-  local date = util.dateLine()
-  local centre = clock
-  if s.w >= 44 then centre = clock .. "  " .. date end
+  local centre = util.clock()
   local cx = math.floor((s.w - #centre) / 2) + 1
   s:write(cx, 1, centre, c.panelText, bg)
   desktop.clockRect = { x = cx, w = #centre }
@@ -245,10 +250,8 @@ function desktop.drawWindowCards(s, layout)
   local regionH = layout.bottom - layout.top + 1
 
   if #wins == 0 then
-    local msg = "No open windows"
-    s:writeCentered(layout.top + math.floor(regionH / 2) - 1, msg, c.dim, c.scrim)
-    s:writeCentered(layout.top + math.floor(regionH / 2) + 1,
-                    "Pick an app from the dash below", c.dim, c.scrim)
+    s:writeCentered(layout.top + math.floor(regionH / 2),
+                    "No open windows", c.dim, c.scrim)
     desktop.cardRects = {}
     return
   end
@@ -415,30 +418,99 @@ local POWER_ITEMS = {
   { id = "craftos",  label = "Exit to CraftOS", icon = "\27" },
 }
 
-function desktop.drawPowerMenu(s)
-  local c = theme.c
-  local w = 22
-  local h = #POWER_ITEMS
-  local x = s.w - w
-  local y = 2
-  compositor.drawShadow(s, x, y, w, h)
-  s:fill(x, y, w, h, " ", c.text, c.card)
-  s:roundRect(x, y, w, h, c.card, select(3, s:getCell(x, y + h)) or c.desktop)
-  desktop.powerRects = {}
-  for i, item in ipairs(POWER_ITEMS) do
-    local iy = y + i - 1
-    local selected = (desktop.powerSelection == i)
-    local bg = selected and c.hover or c.card
-    local fg = item.destructive and c.destructive or c.text
-    s:fill(x, iy, w, 1, " ", fg, bg)
-    s:write(x + 1, iy, item.icon, item.destructive and c.destructive or c.accent, bg)
-    s:write(x + 3, iy, item.label, fg, bg)
-    desktop.powerRects[#desktop.powerRects + 1] = { x = x, y = iy, w = w, item = item, index = i }
+--- One popover implementation for every shell menu (system menu, window
+--- menu).  Each item is { label, icon, destructive, action }.
+function desktop.showMenu(items, anchorX, anchorY, width)
+  local w = width or 0
+  for _, item in ipairs(items) do
+    w = math.max(w, #item.label + 4)
+  end
+  desktop.menu = {
+    items = items,
+    w = w,
+    anchorX = anchorX,
+    anchorY = anchorY,
+    selection = 1,
+  }
+  desktop.invalidate()
+end
+
+function desktop.closeMenu()
+  if desktop.menu then
+    desktop.menu = nil
+    desktop.invalidate()
   end
 end
 
+function desktop.drawMenu(s)
+  local c = theme.c
+  local menu = desktop.menu
+  local w, h = menu.w, #menu.items
+  local x = math.max(1, math.min(menu.anchorX, s.w - w + 1))
+  local y = math.max(2, math.min(menu.anchorY, s.h - h + 1))
+  menu.x, menu.y = x, y
+
+  compositor.drawShadow(s, x, y, w, h)
+  local behind = select(3, s:getCell(x, y)) or c.desktop
+  s:fill(x, y, w, h, " ", c.text, c.card)
+  s:roundRect(x, y, w, h, c.card, behind)
+  for i, item in ipairs(menu.items) do
+    local iy = y + i - 1
+    local selected = (menu.selection == i)
+    local bg = selected and c.hover or c.card
+    local fg = item.destructive and c.destructive or c.text
+    s:fill(x, iy, w, 1, " ", fg, bg)
+    s:write(x + 1, iy, item.icon or " ",
+            item.destructive and c.destructive or c.accent, bg)
+    s:write(x + 3, iy, util.ellipsis(item.label, w - 4), fg, bg)
+  end
+end
+
+--- Hit test: nil when no menu, false when the click missed it, else the index.
+function desktop.menuHit(px, py)
+  local menu = desktop.menu
+  if not menu or not menu.x then return nil end
+  if px < menu.x or px >= menu.x + menu.w
+     or py < menu.y or py >= menu.y + #menu.items then
+    return false
+  end
+  return py - menu.y + 1
+end
+
+function desktop.activateMenu(index)
+  local menu = desktop.menu
+  if not menu then return end
+  local item = menu.items[index]
+  desktop.closeMenu()
+  if item and item.action then item.action() end
+end
+
+--- The system menu, hung off the power glyph in the panel.
+function desktop.showSystemMenu()
+  local items = {}
+  for _, def in ipairs(POWER_ITEMS) do
+    items[#items + 1] = {
+      label = def.label, icon = def.icon, destructive = def.destructive,
+      action = function() desktop.powerAction(def.id) end,
+    }
+  end
+  desktop.showMenu(items, (compositor.primary.w - 22) + 1, 2, 22)
+end
+
+--- The window menu: what used to be two extra glyphs on every title bar.
+function desktop.showWindowMenu(proc, px, py)
+  local win = proc.win
+  desktop.showMenu({
+    { label = win.maximized and "Restore" or "Maximise", icon = "¬",
+      action = function() sched.maximize(proc, compositor.primary) end },
+    { label = "Minimise", icon = "",
+      action = function() sched.minimize(proc) end },
+    { label = "Close", icon = "", destructive = true,
+      action = function() sched.kill(proc, "window menu") end },
+  }, px, py + 1, 14)
+end
+
 function desktop.powerAction(id)
-  desktop.powerMenu = false
   if id == "lock" then
     desktop.locked = true
   elseif id == "settings" then
@@ -452,7 +524,7 @@ function desktop.powerAction(id)
   elseif id == "craftos" then
     desktop.shutdown("exit")
   end
-  sched.dirty = true
+  desktop.invalidate()
 end
 
 function desktop.shutdown(mode)
@@ -572,7 +644,7 @@ function desktop.renderTo(d)
 
   if d.kind == "screen" or d.role == "mirror" then
     if desktop.overview then desktop.drawOverview(s) end
-    if desktop.powerMenu then desktop.drawPowerMenu(s) end
+    if desktop.menu then desktop.drawMenu(s) end
     if desktop.switcher then desktop.drawSwitcher(s) end
     desktop.drawNotifications(s)
   end
@@ -581,15 +653,114 @@ function desktop.renderTo(d)
   d:invalidate()
 end
 
-function desktop.render()
+--- Is anything floating above the windows?  While one of these is up, every
+--- frame has to go the long way round, because a window blit would paint over
+--- whatever is on top of it.
+local function overlaysActive()
+  return desktop.overview or desktop.menu or desktop.switcher
+      or desktop.locked or desktop.drag ~= nil
+      or #desktop.notifications > 0
+end
+
+--- True when some window higher in the stack covers part of this one.
+local function coveredFromAbove(proc)
+  local win = proc.win
+  for i = #sched.stack, 1, -1 do
+    local other = sched.stack[i]
+    if other == proc then return false end
+    local ow = other.win
+    if ow and not ow.minimized
+       and not (ow.x + ow.w - 1 < win.x or ow.x > win.x + win.w - 1
+                or ow.y + ow.h - 1 < win.y or ow.y > win.y + win.h - 1) then
+      return true
+    end
+  end
+  return false
+end
+
+local function displayShows(d, proc)
+  if d.role == "dedicated" or d.role == "off" then return false end
+  if d.role == "extend" then return proc.display == d end
+  return d.kind == "screen" or d.role == "mirror"
+end
+
+--- Blit just the windows whose contents changed.  Returns false if any of
+--- them could not be handled this way, in which case the caller falls back to
+--- a full recomposite.
+function desktop.fastRender()
+  local painted = false
+  for _, proc in ipairs(sched.stack) do
+    if proc.dirty and proc.win then
+      if proc.win.minimized then
+        proc.dirty = false
+      elseif coveredFromAbove(proc) then
+        return false
+      else
+        local win = proc.win
+        local cx = win.x
+        local cy = win.y + (win.headerless and 0 or 1)
+        for _, d in ipairs(compositor.displays) do
+          if displayShows(d, proc) then
+            d.surface:resetClip()
+            d.surface:draw(proc.surface, cx, cy)
+            d:invalidate()
+            painted = true
+          end
+        end
+        proc.dirty = false
+      end
+    end
+  end
+  return painted
+end
+
+--- Repaint row 1 only.  The clock ticks once a second and would otherwise
+--- drag the whole desktop through a full recomposite every tick.
+function desktop.renderPanelOnly()
+  for _, d in ipairs(compositor.displays) do
+    if d.kind == "screen" or d.role == "mirror" then
+      d.surface:resetClip()
+      desktop.drawPanel(d.surface, d)
+      d:invalidate()
+    end
+  end
+end
+
+function desktop.renderFull()
   for _, d in ipairs(compositor.displays) do
     if d.kind == "screen" or d.role == "mirror" or d.role == "extend"
        or d.role == "dedicated" or d.role == "off" then
       desktop.renderTo(d)
     end
   end
+end
+
+function desktop.render()
+  local full = sched.fullRedraw or overlaysActive()
+
+  if not full and desktop.panelOnly and not desktop.anyWindowDirty() then
+    desktop.renderPanelOnly()
+  elseif full or not desktop.fastRender() then
+    desktop.renderFull()
+  end
+
+  if not full then
+    -- the fast paths skip renderTo, so the caret still needs placing
+    local primary = compositor.primary
+    if primary then desktop.applyCursor(primary) end
+  end
+
   compositor.presentAll()
   sched.dirty = false
+  sched.fullRedraw = false
+  desktop.panelOnly = false
+end
+
+function desktop.anyWindowDirty()
+  for _, proc in ipairs(sched.stack) do
+    if proc.dirty and proc.win and not proc.win.minimized then return true end
+  end
+  return false
 end
 
 ------------------------------------------------------------------ search ----
@@ -651,14 +822,14 @@ function desktop.toggleOverview(showGrid)
   desktop.overviewSelection = 1
   desktop.gridSelection = 1
   desktop.gridPage = 1
-  sched.dirty = true
+  desktop.invalidate()
 end
 
 function desktop.closeOverview()
   desktop.overview = false
   desktop.appGrid = false
   desktop.search = ""
-  sched.dirty = true
+  desktop.invalidate()
 end
 
 --------------------------------------------------------------- hit tests ----
@@ -681,6 +852,8 @@ function desktop.handleEvent(ev)
   if name == "timer" and ev[2] == desktop.clockTimer then
     desktop.clockTimer = os.startTimer(1)
     expireNotifications()
+    -- only the clock changed; row 1 is the only thing that needs repainting
+    desktop.panelOnly = true
     sched.dirty = true
     return true
   end
@@ -688,7 +861,7 @@ function desktop.handleEvent(ev)
   if desktop.locked then
     if name == "key" or name == "mouse_click" or name == "char" then
       desktop.locked = false
-      sched.dirty = true
+      desktop.invalidate()
     end
     return true
   end
@@ -701,7 +874,7 @@ function desktop.handleEvent(ev)
       local target = desktop.switcher.list[desktop.switcher.index]
       desktop.switcher = nil
       if target then sched.raise(target) end
-      sched.dirty = true
+      desktop.invalidate()
       return true
     end
     return false
@@ -709,7 +882,7 @@ function desktop.handleEvent(ev)
     if desktop.overview then
       desktop.search = desktop.search .. ev[2]
       desktop.runSearch()
-      sched.dirty = true
+      desktop.invalidate()
       return true
     end
     return false
@@ -725,7 +898,7 @@ function desktop.handleEvent(ev)
       local record = devices.get(ev[2])
       if record then desktop.notify(record.label .. " connected", record.name) end
     end
-    sched.dirty = true
+    desktop.invalidate()
     return false      -- let apps see peripheral events too
   elseif name == "term_resize" then
     compositor.primary:checkSize()
@@ -761,7 +934,7 @@ function desktop.handleKey(key, held)
     else
       desktop.switcher.index = desktop.switcher.index % #desktop.switcher.list + 1
     end
-    sched.dirty = true
+    desktop.invalidate()
     return true
   end
 
@@ -776,7 +949,7 @@ function desktop.handleKey(key, held)
       desktop.overview = true
       desktop.appGrid = true
       desktop.search = ""
-      sched.dirty = true
+      desktop.invalidate()
     end
     return true
   end
@@ -796,19 +969,18 @@ function desktop.handleKey(key, held)
     return true
   end
 
-  if desktop.powerMenu then
+  if desktop.menu then
     if key == keys.escape then
-      desktop.powerMenu = false
-      sched.dirty = true
+      desktop.closeMenu()
       return true
     elseif key == keys.up or key == keys.down then
-      local n = #POWER_ITEMS
-      desktop.powerSelection = ((desktop.powerSelection or 1) +
-                                (key == keys.down and 1 or -1) - 1) % n + 1
-      sched.dirty = true
+      local n = #desktop.menu.items
+      desktop.menu.selection = ((desktop.menu.selection or 1)
+                                + (key == keys.down and 1 or -1) - 1) % n + 1
+      desktop.invalidate()
       return true
     elseif key == keys.enter then
-      desktop.powerAction(POWER_ITEMS[desktop.powerSelection or 1].id)
+      desktop.activateMenu(desktop.menu.selection or 1)
       return true
     end
   end
@@ -827,7 +999,7 @@ function desktop.handleOverviewKey(key)
   elseif key == keys.backspace then
     desktop.search = desktop.search:sub(1, -2)
     desktop.runSearch()
-    sched.dirty = true
+    desktop.invalidate()
     return true
   elseif key == keys.enter then
     if desktop.search ~= "" then
@@ -863,7 +1035,7 @@ function desktop.handleOverviewKey(key)
       desktop.overviewSelection = util.clamp(desktop.overviewSelection + delta, 1,
                                              math.max(1, #visibleWindows()))
     end
-    sched.dirty = true
+    desktop.invalidate()
     return true
   end
   return true    -- the overview swallows everything else
@@ -877,17 +1049,10 @@ function desktop.handleMouse(kind, button, x, y)
     return desktop.handleDrag(kind, x, y)
   end
 
-  if desktop.powerMenu then
+  if desktop.menu then
     if kind == "mouse_click" then
-      for _, rect in ipairs(desktop.powerRects or {}) do
-        if x >= rect.x and x < rect.x + rect.w and y == rect.y then
-          desktop.powerAction(rect.item.id)
-          return true
-        end
-      end
-      desktop.powerMenu = false
-      sched.dirty = true
-      return true
+      local hit = desktop.menuHit(x, y)
+      if hit then desktop.activateMenu(hit) else desktop.closeMenu() end
     end
     return true
   end
@@ -898,9 +1063,7 @@ function desktop.handleMouse(kind, button, x, y)
       if inRect(desktop.activitiesRect, x, y) then
         desktop.toggleOverview(false)
       elseif desktop.powerRect and x >= desktop.powerRect.x then
-        desktop.powerMenu = true
-        desktop.powerSelection = 1
-        sched.dirty = true
+        desktop.showSystemMenu()
       elseif desktop.statusRect and x >= desktop.statusRect.x then
         apps.launch("settings")
       elseif desktop.clockRect and inRect(desktop.clockRect, x, y) then
@@ -919,7 +1082,7 @@ function desktop.handleMouse(kind, button, x, y)
     local top = 2
     if y >= top and y <= top + 2 then
       table.remove(desktop.notifications, 1)
-      sched.dirty = true
+      desktop.invalidate()
       return true
     end
   end
@@ -929,7 +1092,7 @@ function desktop.handleMouse(kind, button, x, y)
   if not proc then
     if kind == "mouse_click" then
       sched.setFocus(nil)
-      sched.dirty = true
+      desktop.invalidate()
     end
     return true
   end
@@ -945,11 +1108,11 @@ function desktop.handleMouse(kind, button, x, y)
       if control == "close" then
         sched.kill(proc, "close button")
         return true
-      elseif control == "max" then
-        sched.maximize(proc, compositor.primary)
-        return true
-      elseif control == "min" then
-        sched.minimize(proc)
+      end
+      -- Right-click opens the window menu, which is where minimise and
+      -- maximise live now that the title bar only carries a close button.
+      if button == 2 then
+        desktop.showWindowMenu(proc, x, y)
         return true
       end
       -- double click to maximise, otherwise start a move
@@ -1031,7 +1194,7 @@ function desktop.handleOverviewMouse(kind, button, x, y)
     if kind == "mouse_scroll" and desktop.appGrid then
       local list = apps.all()
       desktop.gridPage = math.max(1, (desktop.gridPage or 1) + button)
-      sched.dirty = true
+      desktop.invalidate()
     end
     return true
   end
@@ -1041,7 +1204,7 @@ function desktop.handleOverviewMouse(kind, button, x, y)
       if rect.gridButton then
         desktop.appGrid = not desktop.appGrid
         desktop.search = ""
-        sched.dirty = true
+        desktop.invalidate()
       else
         desktop.closeOverview()
         apps.launch(rect.manifest.id)

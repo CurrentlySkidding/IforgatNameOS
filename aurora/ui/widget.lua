@@ -262,7 +262,7 @@ end
 
 ------------------------------------------------------------------ Fixed -----
 
---- Absolute positioning: used by the app builder canvas.
+--- Absolute positioning, for layouts that are not rows and columns.
 local Fixed = util.class(Widget)
 M.Fixed = Fixed
 

@@ -191,8 +191,8 @@ local function runFile()
 end
 
 local function openMenu()
-  app:menu(app.surface.w - 24, 2, {
-    { label = "Open\133", icon = "\4", accel = "^O", action = function()
+  app:menu(app.surface.w - 22, 2, {
+    { label = "Open", icon = "", accel = "^O", action = function()
         app:prompt({
           title = "Open file",
           text = state.path or (vfs.HOME .. "/"),
@@ -200,8 +200,7 @@ local function openMenu()
           onAccept = function(path) if fs.exists(path) then loadFile(path) end end,
         })
       end },
-    { label = "Save", icon = "\4", accel = "^S", action = save },
-    { label = "Save as\133", icon = "\4", action = function()
+    { label = "Save as", icon = "", action = function()
         app:prompt({
           title = "Save as",
           text = state.path or (vfs.HOME .. "/Untitled.txt"),
@@ -210,34 +209,18 @@ local function openMenu()
         })
       end },
     { separator = true },
-    { label = "Find", icon = "\4", accel = "^F", action = function() showFind(false) end },
-    { label = "Replace", icon = "\4", accel = "^R", action = function() showFind(true) end },
-    { label = "Go to line", icon = "\4", accel = "^G", action = function()
-        app:prompt({
-          title = "Go to line",
-          text = tostring(view.line),
-          onAccept = function(text)
-            local n = tonumber(text)
-            if n then view:gotoLine(n) updateStatus() app:queueDraw() end
-          end,
-        })
-      end },
+    { label = "Find", icon = "", accel = "^F", action = function() showFind(false) end },
+    { label = "Replace", icon = "", accel = "^R", action = function() showFind(true) end },
     { separator = true },
-    { label = view.showNumbers and "Hide line numbers" or "Show line numbers",
-      icon = "\7", action = function()
-        view.showNumbers = not view.showNumbers
-        app:queueDraw()
-      end },
-    { label = view.wrap and "Turn off word wrap" or "Turn on word wrap",
-      icon = "\7", action = function()
+    { label = view.wrap and "No word wrap" or "Word wrap", icon = "",
+      action = function()
         view.wrap = not view.wrap
         view.scrollX = 0
         app:queueDraw()
       end },
-    { separator = true },
-    { label = "Run in Terminal", icon = "\16", action = runFile,
+    { label = "Run in Terminal", icon = "", action = runFile,
       disabled = state.path == nil },
-    { label = "Print", icon = "\22", action = function()
+    { label = "Print", icon = "", action = function()
         local job = printer.submit({
           title = state.path and fs.getName(state.path) or "Untitled",
           content = view:getText(),
@@ -245,7 +228,7 @@ local function openMenu()
         })
         app:notify("Queued \"" .. job.title .. "\" for printing", "success")
       end },
-  }, 26)
+  }, 22)
 end
 
 ------------------------------------------------------------------ wiring ---

@@ -29,6 +29,30 @@ local function blitChar(colour)
 end
 Surface.blitChar = blitChar
 
+-- Runs of one repeated character are by far the most allocated strings in the
+-- system: every coloured write builds two of them, and a full-screen repaint
+-- builds hundreds.  They are tiny and highly repetitive, so memoising them
+-- turns most draws into table lookups.
+local runCache = {}
+local RUN_CACHE_MAX = 64
+
+local function run(char, n)
+  if n <= 0 then return "" end
+  if n > RUN_CACHE_MAX then return string.rep(char, n) end
+  local byLength = runCache[char]
+  if not byLength then
+    byLength = {}
+    runCache[char] = byLength
+  end
+  local cached = byLength[n]
+  if not cached then
+    cached = string.rep(char, n)
+    byLength[n] = cached
+  end
+  return cached
+end
+Surface.run = run
+
 function Surface:init(w, h, bg, fg, char)
   self.w = math.max(0, math.floor(w or 0))
   self.h = math.max(0, math.floor(h or 0))
@@ -37,9 +61,9 @@ function Surface:init(w, h, bg, fg, char)
 end
 
 function Surface:clear(bg, fg, char)
-  local line = string.rep(char or " ", self.w)
-  local fl = string.rep(blitChar(fg or colours.white), self.w)
-  local bl = string.rep(blitChar(bg or colours.black), self.w)
+  local line = run(char or " ", self.w)
+  local fl = run(blitChar(fg or colours.white), self.w)
+  local bl = run(blitChar(bg or colours.black), self.w)
   for y = 1, self.h do
     self.t[y], self.f[y], self.b[y] = line, fl, bl
   end
@@ -151,6 +175,13 @@ function Surface:blit(x, y, text, fg, bg)
     text, fg, bg = text:sub(1, keep), fg:sub(1, keep), bg:sub(1, keep)
     len = keep
   end
+  -- Fast path: a write that covers the whole row replaces it outright,
+  -- which is what compositing a full-width window or the wallpaper does.
+  if x == 1 and len == self.w then
+    self.t[y], self.f[y], self.b[y] = text, fg, bg
+    return
+  end
+
   local row = self.t[y]
   self.t[y] = row:sub(1, x - 1) .. text .. row:sub(x + len)
   row = self.f[y]
@@ -162,17 +193,16 @@ end
 --- Write text with uniform colours.
 function Surface:write(x, y, text, fg, bg)
   text = tostring(text)
-  if #text == 0 then return end
-  self:blit(x, y, text,
-    string.rep(blitChar(fg), #text),
-    string.rep(blitChar(bg), #text))
+  local len = #text
+  if len == 0 then return end
+  self:blit(x, y, text, run(blitChar(fg), len), run(blitChar(bg), len))
 end
 
 function Surface:fill(x, y, w, h, char, fg, bg)
   if w <= 0 or h <= 0 then return end
-  local text = string.rep(char or " ", w)
-  local fl = string.rep(blitChar(fg), w)
-  local bl = string.rep(blitChar(bg), w)
+  local text = run(char or " ", w)
+  local fl = run(blitChar(fg), w)
+  local bl = run(blitChar(bg), w)
   for row = y, y + h - 1 do
     self:blit(x, row, text, fl, bl)
   end
@@ -251,7 +281,7 @@ function Surface:scrim(x, y, w, h, fg, bg)
         local text = self.t[row]:sub(x1, x2)
         -- Blank out block glyphs so the scrim reads evenly.
         text = text:gsub("[\128-\159\176-\223]", " ")
-        self:blit(x1, row, text, string.rep(blitChar(fg), n), string.rep(blitChar(bg), n))
+        self:blit(x1, row, text, run(blitChar(fg), n), run(blitChar(bg), n))
       end
     end
   end
@@ -260,9 +290,9 @@ end
 --- Scroll the whole surface by n rows (positive = content moves up).
 function Surface:scroll(n, bg, fg)
   if n == 0 then return end
-  local blank = string.rep(" ", self.w)
-  local fl = string.rep(blitChar(fg or colours.white), self.w)
-  local bl = string.rep(blitChar(bg or colours.black), self.w)
+  local blank = run(" ", self.w)
+  local fl = run(blitChar(fg or colours.white), self.w)
+  local bl = run(blitChar(bg or colours.black), self.w)
   if n > 0 then
     for y = 1, self.h do
       local from = y + n
@@ -286,9 +316,9 @@ end
 
 function Surface:clearLine(y, bg, fg)
   if y < 1 or y > self.h then return end
-  self.t[y] = string.rep(" ", self.w)
-  self.f[y] = string.rep(blitChar(fg or colours.white), self.w)
-  self.b[y] = string.rep(blitChar(bg or colours.black), self.w)
+  self.t[y] = run(" ", self.w)
+  self.f[y] = run(blitChar(fg or colours.white), self.w)
+  self.b[y] = run(blitChar(bg or colours.black), self.w)
 end
 
 --- Rounded corners ----------------------------------------------------------

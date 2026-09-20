@@ -203,23 +203,15 @@ function compositor.drawFrame(surface, win)
       cursor = cursor + #win.iconChar + 1
     end
 
-    -- window controls live on the right
-    local controls = {}
-    if win.canMinimize ~= false then controls[#controls + 1] = "min" end
-    if win.resizable ~= false then controls[#controls + 1] = "max" end
-    controls[#controls + 1] = "close"
-    local ctrlW = #controls * 2
+    -- One control, like GNOME.  Minimise and maximise live in the window menu
+    -- (click the title, or double-click it to maximise), which keeps three
+    -- glyphs and four cells of clutter off every single window.
+    local ctrlW = 2
     win.controlRects = {}
     local cx = x + w - ctrlW
-    for _, kind in ipairs(controls) do
-      local glyph = kind == "close" and CLOSE or (kind == "max" and MAX or MIN)
-      local fg = titleFg
-      if kind == "close" and win.hoverControl == "close" then fg = c.destructive end
-      if win.hoverControl == kind and kind ~= "close" then fg = c.accent end
-      surface:write(cx, y, glyph, fg, headerBg)
-      win.controlRects[#win.controlRects + 1] = { kind = kind, x = cx, y = y }
-      cx = cx + 2
-    end
+    local closeFg = win.hoverControl == "close" and c.destructive or titleFg
+    surface:write(cx, y, CLOSE, closeFg, headerBg)
+    win.controlRects[1] = { kind = "close", x = cx, y = y }
 
     local avail = (x + w - ctrlW - 1) - cursor
     if avail > 2 then

@@ -131,7 +131,7 @@ local FAVOURITES_PATH = "/aurora/etc/favourites.cfg"
 function apps.favourites()
   local saved = util.readTable(FAVOURITES_PATH, nil)
   if not saved then
-    saved = { "files", "terminal", "editor", "writer", "sheets", "builder", "settings" }
+    saved = { "files", "terminal", "assistant", "messages", "web" }
   end
   local out = {}
   for _, id in ipairs(saved) do

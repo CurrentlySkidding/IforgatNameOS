@@ -423,16 +423,8 @@ end
 -------------------------------------------------------------------- menu ---
 
 local function openMenu()
-  app:menu(app.surface.w - 26, 2, {
-    { label = "New sheet", icon = "\254", action = function()
-        sheet.cells = {}
-        sheet.widths = {}
-        state.path = nil
-        state.modified = false
-        state.col, state.row = 1, 1
-        refreshBar()
-      end },
-    { label = "Open\133", icon = "\4", accel = "^O", action = function()
+  app:menu(app.surface.w - 22, 2, {
+    { label = "Open", icon = "", accel = "^O", action = function()
         app:prompt({
           title = "Open spreadsheet",
           text = state.path or (vfs.HOME .. "/Sheets/"),
@@ -440,8 +432,7 @@ local function openMenu()
           onAccept = function(path) if fs.exists(path) then loadSheet(path) end end,
         })
       end },
-    { label = "Save", icon = "\4", accel = "^S", action = save },
-    { label = "Save as\133", icon = "\4", action = function()
+    { label = "Save as", icon = "", action = function()
         app:prompt({
           title = "Save as",
           text = state.path or (vfs.HOME .. "/Sheets/Untitled.asheet"),
@@ -449,14 +440,14 @@ local function openMenu()
           onAccept = function(path) saveAs(path) end,
         })
       end },
-    { label = "Export CSV", icon = "\171", action = function()
-        local target = (state.path and util.stripExtension(state.path)
-                        or (vfs.HOME .. "/Sheets/Untitled")) .. ".csv"
-        util.writeFile(target, toCSV())
-        app:notify("Exported " .. fs.getName(target), "success")
-      end },
     { separator = true },
-    { label = "Chart a range\133", icon = "\254", action = function()
+    { label = "Sum this column", icon = "", action = function()
+        local column = formula.indexToColumn(state.col)
+        setCellText(state.col, state.row,
+                    ("=SUM(%s1:%s%d)"):format(column, column, math.max(1, state.row - 1)))
+        refreshBar()
+      end },
+    { label = "Chart a range", icon = "¬", action = function()
         app:prompt({
           title = "Chart a range",
           message = "Which cells should the chart show?",
@@ -465,17 +456,7 @@ local function openMenu()
           onAccept = buildChart,
         })
       end },
-    { label = chart.kind == "bar" and "Switch to line chart" or "Switch to bar chart",
-      icon = "\254", action = function()
-        chart.kind = chart.kind == "bar" and "line" or "bar"
-        app:queueDraw()
-      end },
-    { label = "Hide chart", icon = "\215", disabled = not chart.visible, action = function()
-        chart.visible = false
-        app:queueLayout()
-      end },
-    { separator = true },
-    { label = "Column width\133", icon = "\4", action = function()
+    { label = "Column width", icon = "", action = function()
         app:prompt({
           title = "Width of column " .. formula.indexToColumn(state.col),
           text = tostring(widthOf(state.col)),
@@ -489,14 +470,14 @@ local function openMenu()
           end,
         })
       end },
-    { label = "Insert sum below", icon = "\4", action = function()
-        local column = formula.indexToColumn(state.col)
-        setCellText(state.col, state.row,
-                    ("=SUM(%s1:%s%d)"):format(column, column, math.max(1, state.row - 1)))
-        refreshBar()
-      end },
     { separator = true },
-    { label = "Print", icon = "\22", accel = "^P", action = function()
+    { label = "Export CSV", icon = "y", action = function()
+        local target = (state.path and util.stripExtension(state.path)
+                        or (vfs.HOME .. "/Sheets/Untitled")) .. ".csv"
+        util.writeFile(target, toCSV())
+        app:notify("Exported " .. fs.getName(target), "success")
+      end },
+    { label = "Print", icon = "", accel = "^P", action = function()
         local job = printer.submit({
           title = state.path and fs.getName(state.path) or sheet.name,
           content = toCSV():gsub(",", "  "),
@@ -504,7 +485,7 @@ local function openMenu()
         })
         app:notify("Queued \"" .. job.title .. "\"", "success")
       end },
-    { label = "Function help", icon = "\4", action = function()
+    { label = "Functions", icon = "", action = function()
         local names = {}
         for name in pairs(formula.functions) do
           if not name:match("^__") then names[#names + 1] = name end
@@ -516,7 +497,7 @@ local function openMenu()
           actions = { { label = "Close", style = "suggested" } },
         })
       end },
-  }, 26)
+  }, 22)
 end
 
 ------------------------------------------------------------------ wiring ---
