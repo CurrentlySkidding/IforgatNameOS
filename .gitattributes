@@ -1,0 +1,7 @@
+# Aurora ships over `wget` straight from GitHub raw, so every shipped file must
+# keep LF endings no matter which platform it was authored on.
+* text=auto eol=lf
+*.lua text eol=lf
+*.txt text eol=lf
+*.md  text eol=lf
+*.py  text eol=lf

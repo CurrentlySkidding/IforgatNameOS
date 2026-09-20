@@ -1,0 +1,15 @@
+# Python tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime state Aurora creates on a computer; never committed
+aurora/var/
+aurora/etc/
+
+# Editor noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
