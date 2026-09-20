@@ -34,22 +34,21 @@ like a real desktop rather than a text menu.
 
 On any CC: Tweaked computer with the HTTP API enabled:
 
-```bash
-wget run https://raw.githubusercontent.com/OWNER/REPO/main/install.lua OWNER/REPO
+```
+wget run https://raw.githubusercontent.com/CurrentlySkidding/IforgatNameOS/main/install.lua
 ```
 
-Replace `OWNER/REPO` with wherever you pushed this. The installer downloads
-everything into a staging folder first, so a dropped connection can never
-leave you with a half-installed system that won't boot. When it's done it
-offers to reboot.
+The installer downloads everything into a staging folder first, so a dropped
+connection can never leave you with a half-installed system that won't boot.
+When it's done it offers to reboot.
 
 Other modes:
 
 | Command | What it does |
 | --- | --- |
-| `install.lua OWNER/REPO` | fresh install |
-| `install.lua OWNER/REPO --update` | reinstall the system, keep `/home` and your settings |
-| `install.lua --uninstall` | remove Aurora, keep `/home` |
+| `install --update` | reinstall the system, keep `/home` and your settings |
+| `install --uninstall` | remove Aurora, keep `/home` |
+| `install owner/fork [branch]` | install from a fork |
 
 **No HTTP?** Copy the repository onto a floppy disk, then from the CraftOS
 shell: `cp /disk/aurora /aurora` and `cp /disk/startup.lua /startup.lua`.

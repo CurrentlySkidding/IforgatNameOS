@@ -2,17 +2,17 @@
 
      Run this on any CC:Tweaked computer:
 
-       wget run https://raw.githubusercontent.com/OWNER/REPO/main/install.lua
+       wget run https://raw.githubusercontent.com/CurrentlySkidding/IforgatNameOS/main/install.lua
 
      Options (all optional):
-       install OWNER/REPO [branch]     install from a different fork
+       install OWNER/REPO [branch]     install from a fork
        install --update                keep /home, replace the system
        install --uninstall             remove Aurora, keep /home
 
      Everything lands in /aurora, plus a /startup.lua that boots it.
 ----------------------------------------------------------------------------]]
 
-local DEFAULT_REPO = "OWNER/REPO"
+local DEFAULT_REPO = "CurrentlySkidding/IforgatNameOS"
 local DEFAULT_BRANCH = "main"
 
 local args = { ... }
@@ -110,15 +110,6 @@ header()
 if not http then
   status("The HTTP API is disabled on this computer.", colours.red)
   status("Enable it in the ComputerCraft config, or copy the files in by disk.")
-  return
-end
-
-if repo == DEFAULT_REPO then
-  status("This installer has not been pointed at a repository yet.", colours.red)
-  status("Run it with your repo, for example:")
-  paint(colours.lightGrey)
-  print("  install yourname/aurora-os")
-  paint(colours.white)
   return
 end
 
