@@ -377,10 +377,15 @@ function vm.run(program, opts)
         local args2 = {}
         for i = count, 1, -1 do args2[i] = pop() end
         local fnHost = host[instruction.a]
-        if not fnHost then
+        if fnHost then
+          push(fnHost(state, args2))
+        elseif program.funcs[instruction.a] then
+          -- The compiler could not see this action yet -- it came from a
+          -- library linked in afterwards -- so resolve it now.
+          push(call(instruction.a, args2, depth + 1))
+        else
           fail(state, "there is no action called " .. tostring(instruction.a))
         end
-        push(fnHost(state, args2))
 
       elseif op == "RET" then return pop()
       elseif op == "HALT" then return nil

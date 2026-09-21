@@ -314,6 +314,23 @@ local function openMenu()
   local inTrash = util.startsWith(state.path, vfs.TRASH)
   local items = {
     { label = "New folder", icon = "\254", action = newFolder, accel = "^N" },
+    { label = "New program", icon = "\187", action = function()
+        app:prompt({
+          title = "New SimpleLang program",
+          text = "program.sl",
+          onAccept = function(name)
+            name = util.trim(name)
+            if name == "" then return end
+            if util.extension(name) == "" then name = name .. ".sl" end
+            local target = vfs.newFile(state.path, name,
+              "# " .. name .. "\n\nsay \"hello\"\n")
+            if target then
+              refresh()
+              appsSvc.launch("studio", { target })
+            end
+          end,
+        })
+      end },
     { separator = true },
     { label = "Copy", icon = "\4", accel = "^C", disabled = entry == nil,
       action = function() copySelected("copy") end },
@@ -331,6 +348,26 @@ local function openMenu()
     { label = "Properties", icon = "\4", disabled = entry == nil,
       action = showProperties },
   }
+
+  -- Anything runnable gets a Run entry at the top, where you expect it.
+  if entry and not entry.isDir then
+    if entry.type.kind == "program" then
+      table.insert(items, 1, { label = "Run", icon = "\16", action = function()
+        appsSvc.runProgram(entry.path)
+      end })
+    elseif util.extension(entry.name) == "sl" then
+      table.insert(items, 1, { label = "Build and run", icon = "\16", action = function()
+        local slang = arequire("lib.slang.init")
+        local built, buildErr = slang.buildFile(entry.path)
+        if not built then
+          app:notify(slang.errorText(buildErr), "error")
+        else
+          refresh()
+          appsSvc.runProgram(built.programPath)
+        end
+      end })
+    end
+  end
 
   -- Contextual extras, so they are only in the way when they are useful.
   if entry and not entry.isDir then

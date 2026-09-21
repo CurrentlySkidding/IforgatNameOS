@@ -285,9 +285,105 @@ REMOTE_EVENT = b"""
       end
     """
 
+SLANG_PROBE = b"""
+function(env)
+  local nl = string.char(10)
+  local slang = env.arequire("lib.slang.init")
+  local util = env.arequire("lib.util")
+  local failures = {}
+
+  local source = table.concat({
+    "set score to 0",
+    "for i from 1 to 5",
+    "  set score to score + i",
+    "end",
+    "to double with n",
+    "  give n * 2",
+    "end",
+    "say score",
+    "say double(21)",
+    "set xs to [1, 2, 3]",
+    "set xs[2] to 9",
+    "say xs[2]",
+    "if score > 10 then say \\"big\\" else say \\"small\\" end",
+    "set n to 3",
+    "while n > 0 do",
+    "  set n to n - 1",
+    "end",
+    "say n",
+  }, nl)
+
+  local built, err = slang.build(source, "t")
+  if not built then return "compile failed: " .. slang.errorText(err) end
+
+  -- the .as text must be the real thing: run what it says, not the AST
+  local reread, rerr = slang.compiler.fromAssembly(built.assembly)
+  if not reread then return "assembly did not read back: " .. slang.errorText(rerr) end
+  local linked, lerr = slang.vm.link(reread)
+  if not linked then return "link failed: " .. slang.errorText(lerr) end
+
+  local printed = {}
+  local ok, runErr = slang.vm.run(linked,
+    { io = { write = function(t) printed[#printed+1] = t end } })
+  if not ok then return "runtime failed: " .. slang.errorText(runErr) end
+
+  local expected = { "15", "42", "9", "big", "0" }
+  for i, want in ipairs(expected) do
+    if printed[i] ~= want then
+      failures[#failures+1] = ("line %d was %q, wanted %q")
+        :format(i, tostring(printed[i]), want)
+    end
+  end
+
+  -- build a real file, then load the .ep back and run it
+  util.writeFile("home/projects/t/main.sl", source)
+  local result, buildErr = slang.buildFile("home/projects/t/main.sl")
+  if not result then return "buildFile failed: " .. slang.errorText(buildErr) end
+  if not env.fs.exists(result.assemblyPath) then failures[#failures+1] = "no .as written" end
+  if not env.fs.exists(result.programPath) then failures[#failures+1] = "no .ep written" end
+
+  printed = {}
+  local ranOk, runErr2 = slang.runFile(result.programPath,
+    { write = function(t) printed[#printed+1] = t end })
+  if not ranOk then
+    failures[#failures+1] = "running the .ep failed: " .. slang.errorText(runErr2)
+  elseif printed[1] ~= "15" then
+    failures[#failures+1] = "the .ep printed " .. tostring(printed[1])
+  end
+
+  -- a library, used from another program
+  util.writeFile("home/lib/mathy.sl", "to triple with n" .. nl .. "  give n * 3" .. nl .. "end")
+  local lib, libErr = slang.buildFile("home/lib/mathy.sl", "library")
+  if not lib then
+    failures[#failures+1] = "library build failed: " .. slang.errorText(libErr)
+  else
+    printed = {}
+    local usedOk, usedErr = slang.runSource(
+      "use mathy" .. nl .. "say triple(5)",
+      { write = function(t) printed[#printed+1] = t end }, "user")
+    if not usedOk then
+      failures[#failures+1] = "using a library failed: " .. slang.errorText(usedErr)
+    elseif printed[1] ~= "15" then
+      failures[#failures+1] = "the library gave " .. tostring(printed[1])
+    end
+  end
+
+  -- errors must be reported with a line number, not crash the host
+  local bad, badErr = slang.build("set x to" .. nl .. "say 1", "bad")
+  if bad then failures[#failures+1] = "a broken program compiled anyway"
+  elseif (badErr.line or 0) < 1 then failures[#failures+1] = "no line number on the error" end
+
+  local divOk, divErr = slang.runSource("say 1 / 0", { write = function() end }, "d")
+  if divOk then failures[#failures+1] = "dividing by zero was allowed" end
+
+  return table.concat(failures, nl)
+end
+"""
+
+
 APPS = ["files", "terminal", "editor", "writer", "sheets", "slides",
         "settings", "calc", "monitor", "messages", "web", "assistant",
-        "defense"]
+        "defense", "studio", "snake", "doom"]
 
 
 class Case:
@@ -880,6 +976,36 @@ def test_defense_alert_crosses_network():
     return problems
 
 
+
+def test_simplelang():
+    case = Case("simplelang")
+    message = case.lua.eval(SLANG_PROBE)(case.machine.env).decode().strip()
+    problems = case.errors()
+    if message:
+        problems.extend(message.splitlines())
+    return problems
+
+
+def test_games_render():
+    """Snake and the raycaster must draw a frame without crashing."""
+    problems = []
+    for app_id in ("snake", "doom"):
+        case = Case(app_id)
+        message = case.launch(case.machine.env, app_id.encode()).decode()
+        if message:
+            problems.append(message)
+        case.run_script([
+            (b"key", 200, False), (b"key_up", 200),
+            (b"key", 205, False), (b"key_up", 205),
+            (b"key", 57, False), (b"key_up", 57),
+        ])
+        for _ in range(6):
+            case.machine.push(b"timer", 1)
+            case.machine.pump(40)
+        problems.extend("%s: %s" % (app_id, line) for line in case.errors())
+    return problems
+
+
 def main():
     passed = True
     passed &= check("boot", test_boot)
@@ -906,6 +1032,8 @@ def main():
     passed &= check("defense system and redstone", test_defense)
     passed &= check("defense alerts across the network",
                     test_defense_alert_crosses_network)
+    passed &= check("SimpleLang compiler and vm", test_simplelang)
+    passed &= check("games draw a frame", test_games_render)
     print()
     print("ALL PASSED" if passed else "FAILURES")
     return 0 if passed else 1

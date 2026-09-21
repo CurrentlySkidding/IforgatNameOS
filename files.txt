@@ -8,6 +8,8 @@ aurora/apps/calc/main.lua
 aurora/apps/calc/manifest.lua
 aurora/apps/defense/main.lua
 aurora/apps/defense/manifest.lua
+aurora/apps/doom/main.lua
+aurora/apps/doom/manifest.lua
 aurora/apps/editor/main.lua
 aurora/apps/editor/manifest.lua
 aurora/apps/files/main.lua
@@ -22,6 +24,10 @@ aurora/apps/sheets/main.lua
 aurora/apps/sheets/manifest.lua
 aurora/apps/slides/main.lua
 aurora/apps/slides/manifest.lua
+aurora/apps/snake/main.lua
+aurora/apps/snake/manifest.lua
+aurora/apps/studio/main.lua
+aurora/apps/studio/manifest.lua
 aurora/apps/terminal/main.lua
 aurora/apps/terminal/manifest.lua
 aurora/apps/web/main.lua
@@ -45,6 +51,10 @@ aurora/lib/formula.lua
 aurora/lib/knowledge.lua
 aurora/lib/syntax.lua
 aurora/lib/util.lua
+aurora/lib/slang/compiler.lua
+aurora/lib/slang/init.lua
+aurora/lib/slang/parser.lua
+aurora/lib/slang/vm.lua
 aurora/shell/desktop.lua
 aurora/shell/wallpaper.lua
 aurora/svc/apps.lua

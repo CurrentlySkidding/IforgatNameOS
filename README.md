@@ -120,6 +120,13 @@ conversation log and raise a notification.
 directory of everything it has heard from. Pages use a tiny markup with
 headings, bullets, quotes and clickable links that reach across computers.
 
+**Studio** — the SimpleLang workbench: projects, an editor, the compiler, and
+the assembly it produces. Build writes the `.as` assembly and the `.ep`
+executable beside your source; Run launches it in its own window.
+
+**Snake** and **Corridor** — an arcade game and a first-person raycast maze,
+both drawn on the sub-pixel canvas.
+
 **Aria** — the assistant. Ask her how to make a beacon, where diamond spawns,
 what the Warden's health is, how to brew fire resistance, or what Mending
 does. Tell her to open an app, message a computer, arm the base or turn the
@@ -320,7 +327,11 @@ aurora/
     crypto.lua         XXTEA encryption and message authentication
     knowledge.lua      what Aria knows about Minecraft
     aria.lua           the assistant's intent matching and memory
-  apps/                the thirteen bundled applications
+    slang/parser.lua   SimpleLang lexer and parser
+    slang/compiler.lua AST -> assembly, and assembly -> program
+    slang/vm.lua       the stack machine and its host functions
+    slang/init.lua     build, load, run, package
+  apps/                the sixteen bundled applications
 ```
 
 ---

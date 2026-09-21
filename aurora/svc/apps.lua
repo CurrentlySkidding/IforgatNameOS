@@ -213,11 +213,47 @@ function apps.openFile(path)
   if fs.isDir(path) then
     return apps.launch("files", { path })
   end
+  -- A built SimpleLang program is executable: opening it runs it.
+  if vfs.typeOf(path).kind == "program" then
+    return apps.runProgram(path)
+  end
   local fileType = vfs.typeOf(path)
   local target = fileType.app or "editor"
   if not apps.registry[target] then target = "editor" end
   vfs.touchRecent(path)
   return apps.launch(target, { path })
+end
+
+--- Run a built SimpleLang program (.ep) in its own window.
+function apps.runProgram(path)
+  local slang = arequire("lib.slang.init")
+  local theme = arequire("gfx.theme")
+  local title = util.stripExtension(fs.getName(path))
+
+  return sched.spawn({
+    name = "ep-" .. title,
+    title = title,
+    window = { w = 40, h = 14 },
+    icon = { char = "\16", colour = colours.lime },
+    fn = function()
+      term.setBackgroundColour(theme.c.view)
+      term.setTextColour(theme.c.text)
+      term.clear()
+      term.setCursorPos(1, 1)
+      local ok, err = slang.runFile(path, slang.terminalIO())
+      print("")
+      if not ok then
+        term.setTextColour(theme.c.destructive)
+        print(slang.errorText(err))
+      else
+        term.setTextColour(theme.c.dim)
+        print("-- finished --")
+      end
+      term.setTextColour(theme.c.dim)
+      print("Press any key to close.")
+      os.pullEvent("key")
+    end,
+  })
 end
 
 --- Every app that declares it can handle this file's kind.

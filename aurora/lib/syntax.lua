@@ -159,11 +159,94 @@ function syntax.markdown(text)
   return table.concat(out):sub(1, len)
 end
 
+
+--- SimpleLang highlighter.
+local SL_KEYWORDS = {}
+for word in ([[set to say ask if then else end while repeat times for from with
+call give stop and or not true false nothing use forever do]]):gmatch("%S+") do
+  SL_KEYWORDS[word] = true
+end
+
+function syntax.simplelang(text)
+  local c = theme.c
+  local out = {}
+  local i, len = 1, #text
+
+  while i <= len do
+    local rest = text:sub(i)
+    if rest:sub(1, 1) == "#" then
+      out[#out + 1] = run(c.dim, len - i + 1)
+      break
+    end
+    local quote = rest:sub(1, 1)
+    if quote == '"' or quote == "'" then
+      local j = i + 1
+      while j <= len do
+        local ch = text:sub(j, j)
+        if ch == "\\" then j = j + 2
+        elseif ch == quote then j = j + 1 break
+        else j = j + 1 end
+      end
+      out[#out + 1] = run(c.success, math.min(j, len + 1) - i)
+      i = j
+    else
+      local word = rest:match("^[%a_][%w_]*")
+      if word then
+        local colour = c.text
+        if SL_KEYWORDS[word] then colour = c.accent
+        elseif text:sub(i + #word):match("^%s*%(") then colour = c.accentSoft end
+        out[#out + 1] = run(colour, #word)
+        i = i + #word
+      else
+        local number = rest:match("^%d+%.?%d*")
+        if number then
+          out[#out + 1] = run(c.warning, #number)
+          i = i + #number
+        else
+          local symbol = rest:match("^[%+%-%*/%%=<>~!%(%)%[%],:%.]+")
+          if symbol then
+            out[#out + 1] = run(c.dim, #symbol)
+            i = i + #symbol
+          else
+            out[#out + 1] = run(c.text, 1)
+            i = i + 1
+          end
+        end
+      end
+    end
+  end
+
+  local result = table.concat(out)
+  if #result < len then result = result .. run(c.text, len - #result) end
+  return result:sub(1, len)
+end
+
+--- SimpleLang assembly highlighter.
+function syntax.assembly(text)
+  local c = theme.c
+  local len = #text
+  if len == 0 then return "" end
+  if text:match("^%s*;") then return run(c.dim, len) end
+  if text:match("^%s*%.") then return run(c.warning, len) end
+  if text:match("^[%w_@]+:%s*$") then return run(c.accentSoft, len) end
+
+  local indent, op, rest = text:match("^(%s*)([A-Z][A-Z0-9]*)(.*)$")
+  if op then
+    local restColour = c.text
+    if rest:match('^%s*"') then restColour = c.success
+    elseif rest:match("^%s*%-?%d") then restColour = c.warning end
+    return run(c.text, #indent) .. run(c.accent, #op) .. run(restColour, #rest)
+  end
+  return run(c.text, len)
+end
+
 --- Pick a highlighter from a filename.
 function syntax.forPath(path)
   local ext = (fs.getName(path):match("%.([%w_]+)$") or ""):lower()
   if ext == "lua" then return syntax.lua end
   if ext == "md" or ext == "adoc" then return syntax.markdown end
+  if ext == "sl" then return syntax.simplelang end
+  if ext == "as" then return syntax.assembly end
   return nil
 end
 
