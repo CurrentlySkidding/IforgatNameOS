@@ -92,7 +92,7 @@ end
 """
 
 
-def build(width=51, height=19, monitors=0, printer=False):
+def build(width=51, height=19, monitors=0, printer=False, modem=False, cid=7):
     # encoding=None keeps Lua strings as raw bytes, which is what a CC screen
     # buffer really is.
     lua = lupa.LuaRuntime(unpack_returned_tuples=False, encoding=None)
@@ -107,12 +107,26 @@ def build(width=51, height=19, monitors=0, printer=False):
     # redirection into a window buffer) can be exercised here too.
     mount(emu.vfs, b"rom/programs/shell.lua", FAKE_SHELL)
 
-    opts = lua.table_from({b"width": width, b"height": height})
+    opts = lua.table_from({b"width": width, b"height": height, b"id": cid})
     peripherals = lua.eval(b"function() return {} end")()
     machine_printed = None
     if printer:
         machine_printed = lua.eval(b"function() return {} end")()
         peripherals[b"printer_0"] = lua.eval(MAKE_PRINTER)(machine_printed)
+        opts[b"peripherals"] = peripherals
+    if modem:
+        make_modem = lua.eval(
+            b"""
+            function()
+              return { type = "modem", handle = {
+                isWireless = function() return true end,
+                open = function() end, close = function() end,
+                transmit = function() end,
+              } }
+            end
+            """
+        )
+        peripherals[b"modem_0"] = make_modem()
         opts[b"peripherals"] = peripherals
     if monitors:
         make = lua.eval(

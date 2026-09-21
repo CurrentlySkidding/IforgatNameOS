@@ -75,6 +75,56 @@ function kernel.startServices()
       if not ok then log.error("printerd", tostring(err)) end
     end,
   })
+
+  local net = arequire("svc.net")
+  sched.spawn({
+    name = "netd",
+    title = "Secure network",
+    window = false,
+    fn = function()
+      local ok, err = pcall(net.service)
+      if not ok then log.error("netd", tostring(err)) end
+    end,
+  })
+
+  local messages = arequire("svc.messages")
+  sched.spawn({
+    name = "messagesd",
+    title = "Messages",
+    window = false,
+    fn = function()
+      local ok, err = pcall(messages.service)
+      if not ok then log.error("messagesd", tostring(err)) end
+    end,
+  })
+
+  local defense = arequire("svc.defense")
+  sched.spawn({
+    name = "defensed",
+    title = "Defense",
+    window = false,
+    fn = function()
+      local ok, err = pcall(defense.service)
+      if not ok then log.error("defensed", tostring(err)) end
+    end,
+  })
+
+  local web = arequire("svc.web")
+  sched.spawn({
+    name = "webd",
+    title = "Web host",
+    window = false,
+    fn = function()
+      local ok, err = pcall(web.service)
+      if not ok then log.error("webd", tostring(err)) end
+    end,
+  })
+
+  -- Processes that go away must not leave subscriptions behind.
+  sched.on("exit", function(proc)
+    net.unsubscribeAll(proc.pid)
+    messages.unlisten(proc.pid)
+  end)
 end
 
 --------------------------------------------------------------- autostart ----

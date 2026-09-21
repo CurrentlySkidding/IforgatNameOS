@@ -256,11 +256,25 @@ app follows light mode and the user's accent.
 
 ## Publishing
 
-The App Builder's **Export installer** writes a single `.lua` file that
-recreates your app anywhere:
+Commit the folder to a repo and tell people to drop it in `/home/apps/`,
+or write a small installer script that creates the two files.
 
-```bash
-wget run https://raw.githubusercontent.com/you/your-repo/main/hello-install.lua
+To reach the network from your app:
+
+```lua
+local net = arequire("svc.net")
+
+net.subscribe("mygame.move", aurora.pid)   -- events arrive as "aurora_net"
+net.send(12, "mygame.move", { x = 3, y = 9 })
+net.broadcast("mygame.hello", {})
+
+app.onEvent = function(name, kind, sender, data)
+  if name == "aurora_net" and kind == "mygame.move" then
+    -- data came from computer `sender`, already decrypted and verified
+  end
+end
 ```
 
-Or commit the folder to a repo and tell people to drop it in `/home/apps/`.
+Everything is encrypted and authenticated with the user's network key before
+it leaves the computer, and replayed frames are dropped, so you do not have to
+think about any of that.

@@ -5,10 +5,14 @@ A desktop operating system for **CC: Tweaked** computers in Minecraft.
 Aurora boots straight from power-on, replaces the CraftOS shell with a
 GNOME-style desktop, and brings its own kernel, window manager, compositor,
 widget toolkit and application suite — a file manager, a terminal, a code
-editor, a word processor, a spreadsheet, a presentation app, an app builder,
-settings and a system monitor. It drives monitors and printers as real
-peripherals, so a wall of monitors becomes a projector and a printer prints
-your documents.
+editor, a word processor, a spreadsheet, a presentation app, settings and a
+system monitor. On top of that sits an encrypted network the rest of the
+system is built on: chat with other computers, a little internet you host
+yourself, a base defense system wired to real redstone, and an assistant that
+knows Minecraft and can drive the machine for you.
+
+It drives monitors and printers as real peripherals, so a wall of monitors
+becomes a projector and a printer prints your documents.
 
 It runs on a 51x19 character grid in 16 colours. Aurora redefines every one of
 those 16 palette slots to an Adwaita-derived ramp and uses CC's 2x3 sub-pixel
@@ -71,6 +75,10 @@ Aurora runs on a basic computer but you lose the palette and the pointer.
 | `Alt`+`F4` | Close the focused window |
 | `Ctrl`+`F5` | Force a full repaint |
 
+Title bars carry a single close button, like GNOME. Minimise and maximise live
+in the window menu — **right-click the title bar** — and double-clicking the
+title bar maximises.
+
 Start typing in the overview to search apps *and* your files; press `Enter` to
 open the first hit. Drag a window by its header bar; drop it against the top
 edge to maximise. Drag the bottom-right corner to resize. Click the power icon
@@ -103,9 +111,30 @@ CSV, chart any range, resize columns, print.
 Aurora hands the monitor over to the app, so a monitor wall behind you becomes
 the projector while you keep the speaker view on the computer.
 
-**App Builder** — lay out widgets on a canvas, attach Lua to their events,
-press Run to spawn it as a live window, then either publish it into your app
-grid or export a single-file installer you can push to GitHub.
+**Messages** — encrypted chat with every other Aurora computer on your
+network key. Messages arrive even when the window is closed: they land in the
+conversation log and raise a notification.
+
+**Web** — a small internet for your world. Every computer can host a site from
+`/home/www`; sites announce themselves, so the browser's home page is a live
+directory of everything it has heard from. Pages use a tiny markup with
+headings, bullets, quotes and clickable links that reach across computers.
+
+**Aria** — the assistant. Ask her how to make a beacon, where diamond spawns,
+what the Warden's health is, how to brew fire resistance, or what Mending
+does. Tell her to open an app, message a computer, arm the base or turn the
+lights on and she does it. Ask for a status report and she reads the network,
+the printers, the disk and the defense system back to you. She remembers your
+name and what you usually ask about. It is rules and a knowledge base, not a
+model — which means it answers instantly and works on a computer buried in a
+cave with no connection to anything.
+
+**Defense** — the base security system, wired to actual redstone. Devices are
+named outputs (doors, lights, traps, sirens, turrets) on a side or a bundled
+cable colour. Sensors are inputs from pressure plates, tripwires or player
+detectors. Arm the system behind a passcode and a tripped sensor fires every
+device marked as an alarm response, logs it, notifies you, and broadcasts an
+encrypted alert to every other computer on your network.
 
 **Settings** — light/dark/high-contrast themes, nine accent colours, five
 wallpapers, monitor roles and text scale, printers and their queue, modems,
@@ -125,6 +154,30 @@ and the live kernel log.
 
 Everything hot-plugs — attach a monitor while the desktop is running and it
 appears in Settings within a tick.
+
+---
+
+## The secure network
+
+Everything that leaves an Aurora computer — chat, web pages, defense alerts —
+goes out as an encrypted, authenticated, replay-protected frame over rednet.
+
+Computers that share a **network key** can talk to each other. Set it in
+Settings → Network; each machine shows a fingerprint so you can check two of
+them match without ever showing the key itself. Change the key and traffic
+from the old one stops being readable, which is the whole point.
+
+The cipher is XXTEA and the message authentication code is the same primitive
+in CBC-MAC form, so there is exactly one algorithm to trust. Frames carry a
+nonce and are rejected if replayed.
+
+What this gives you: somebody sniffing your channel with a modem sees hex, and
+cannot forge a message that passes the MAC. What it does not give you:
+protection from anyone who can read the key off your computer's disk. Treat
+the network key like a base password.
+
+You need a modem on each computer. Wireless reaches 64 blocks (further up
+high, less in a storm); an ender modem reaches anywhere, across dimensions.
 
 ---
 
@@ -175,8 +228,7 @@ app:run()
 ```
 
 Drop the folder in `/home/apps/` and it appears in the app grid on the next
-scan (Settings → Apps, or a reboot). Or build it visually in the App Builder
-and hit Publish.
+scan (Settings → Apps, or a reboot).
 
 The toolkit gives you `Label`, `Button`, `IconButton`, `Entry`, `TextView`,
 `Switch`, `CheckBox`, `ListBox`, `IconGrid`, `Chart`, `ProgressBar`, `Spinner`,
@@ -185,7 +237,8 @@ The toolkit gives you `Label`, `Button`, `IconButton`, `Entry`, `TextView`,
 `app:prompt`, `app:confirm`, `app:menu`, `app:notify` and `app:accel` for the
 usual desktop furniture.
 
-See [docs/writing-apps.md](docs/writing-apps.md) for the full reference and
+See [docs/writing-apps.md](docs/writing-apps.md) for the full reference,
+[docs/network.md](docs/network.md) for the secure network, and
 [docs/architecture.md](docs/architecture.md) for how the kernel works.
 
 ---
@@ -200,6 +253,7 @@ pip install lupa
 
 python tools/check.py                      # syntax-check every Lua file
 python tools/test_all.py                   # boot + integration tests
+python tools/bench.py                      # compositing cost per interaction
 python tools/boot_test.py                  # render the desktop
 python tools/boot_test.py --launch sheets  # render one app
 python tools/boot_test.py --script "f1,click:5:16"
@@ -210,6 +264,11 @@ python tools/make_manifest.py              # regenerate files.txt
 `boot_test.py` prints the emulated screen with real 24-bit colour, mapping
 CC's sub-pixel glyphs to shade characters so the layout is readable in a
 normal terminal.
+
+The emulator models redstone and wires two machines together over a rednet
+bus, so the tests genuinely encrypt a message on one computer and decrypt it
+on another, fetch a web page across the wire, and trip a sensor to watch the
+alarm drive a redstone side.
 
 After adding or removing a shipped file, run `tools/make_manifest.py` — the
 installer reads `files.txt`.
@@ -249,11 +308,19 @@ aurora/
     apps.lua           app registry, launching, file associations
     display.lua        monitor roles and claiming
     printer.lua        print spooler
+    net.lua            encrypted, authenticated rednet framing + discovery
+    messages.lua       chat storage and delivery
+    web.lua            page markup, site hosting, site discovery
+    defense.lua        redstone devices, sensors, alarm, remote alerts
   lib/
     util.lua           helpers
     syntax.lua         Lua + Markdown highlighters
     formula.lua        spreadsheet formula engine
-  apps/                the ten bundled applications
+    bitops.lua         32-bit ops across bit32 / native / arithmetic backends
+    crypto.lua         XXTEA encryption and message authentication
+    knowledge.lua      what Aria knows about Minecraft
+    aria.lua           the assistant's intent matching and memory
+  apps/                the thirteen bundled applications
 ```
 
 ---

@@ -18,6 +18,7 @@ local appsSvc    = arequire("svc.apps")
 local printer    = arequire("svc.printer")
 local displaySvc = arequire("svc.display")
 local wallpaper  = arequire("shell.wallpaper")
+local netSvc     = arequire("svc.net")
 local compositor = arequire("gfx.compositor")
 
 local app = App({ title = "Settings" })
@@ -330,6 +331,20 @@ local function refreshNetwork()
       value = record,
     }
   end
+  rows[#rows + 1] = { header = true, title = "Secure network" }
+  rows[#rows + 1] = { title = "Status", trailing = netSvc.status(),
+                      icon = { char = "\15",
+                               colour = netSvc.open and theme.c.success or theme.c.dim } }
+  rows[#rows + 1] = { title = "Network key", trailing = netSvc.fingerprint(),
+                      icon = { char = "\7", colour = theme.c.accent }, action = "key" }
+  rows[#rows + 1] = { title = "This computer is", trailing = netSvc.displayName or "?",
+                      action = "name" }
+  local peers = netSvc.peerList()
+  local online = 0
+  for _, peer in ipairs(peers) do if peer.online then online = online + 1 end end
+  rows[#rows + 1] = { title = "Computers found", trailing = ("%d (%d on)"):format(#peers, online),
+                      action = "peers" }
+
   rows[#rows + 1] = { header = true, title = "This computer" }
   rows[#rows + 1] = { title = "Computer ID", trailing = tostring(os.getComputerID()) }
   rows[#rows + 1] = { title = "Label", trailing = os.getComputerLabel() or "not set" }
@@ -340,6 +355,60 @@ end
 
 networkList:connect("activate", function(_, index, row)
   local record = row and row.value
+
+  if row and row.action == "key" then
+    app:prompt({
+      title = "Network key",
+      message = "Every computer that should talk to this one needs the same key. "
+             .. "Check the fingerprints match afterwards.",
+      text = "",
+      onAccept = function(text)
+        if util.trim(text) == "" then
+          app:notify("Key unchanged")
+          return
+        end
+        local fingerprint = netSvc.setKey(util.trim(text))
+        netSvc.forgetPeers()
+        app:notify("Key set, fingerprint " .. fingerprint, "success")
+        refreshNetwork()
+      end,
+    })
+    return
+  elseif row and row.action == "name" then
+    app:prompt({
+      title = "Name on the network",
+      text = netSvc.displayName or "",
+      onAccept = function(text)
+        netSvc.setName(text)
+        netSvc.announce()
+        refreshNetwork()
+      end,
+    })
+    return
+  elseif row and row.action == "peers" then
+    local items = {}
+    for _, peer in ipairs(netSvc.peerList()) do
+      items[#items + 1] = {
+        label = util.ellipsis(peer.name, 14) .. " #" .. peer.id,
+        icon = "\7",
+        action = function() appsSvc.launch("messages", { tostring(peer.id) }) end,
+      }
+    end
+    if #items == 0 then
+      items[1] = { label = "Nobody found", disabled = true }
+    end
+    items[#items + 1] = { separator = true }
+    items[#items + 1] = { label = "Look again", icon = "\15", action = function()
+      local ok, err = netSvc.start()
+      if ok then netSvc.announce() app:notify("Looking[")
+      else app:notify(err or "No modem", "error") end
+    end }
+    items[#items + 1] = { label = "Forget all", icon = "", destructive = true,
+      action = function() netSvc.forgetPeers() refreshNetwork() end }
+    app:menu(app.surface.w - 24, 3, items, 24)
+    return
+  end
+
   if not record then
     if row and row.title == "Label" then
       app:prompt({

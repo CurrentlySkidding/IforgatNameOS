@@ -446,8 +446,9 @@ function emu.build(opts)
       local _, timerId = os_api.pullEvent("timer")
     until timerId == id
   end
-  function os_api.getComputerID() return 7 end
-  function os_api.computerID() return 7 end
+  local computerId = opts.id or 7
+  function os_api.getComputerID() return computerId end
+  function os_api.computerID() return computerId end
   local label = opts.label or "aurora-dev"
   function os_api.getComputerLabel() return label end
   function os_api.setComputerLabel(value) label = value end
@@ -527,14 +528,41 @@ function emu.build(opts)
     return nil
   end
 
+  -- Forward declaration: rednet's closures capture this before the driver
+  -- table below fills it in.
+  local machine = {}
+
   ---------------------------------------------------------------- others ----
 
-  local rednet = {
-    open = function() end, close = function() end,
-    isOpen = function() return false end,
-    send = function() end, broadcast = function() end,
-    receive = function() return nil end,
-  }
+  -- rednet, wired to a Python-side bus so two emulated computers can really
+  -- talk to each other.  Frames cross as serialised strings, exactly as they
+  -- would over a modem.
+  local openSides = {}
+  local rednet = {}
+  rednet.open = function(side) openSides[side or "back"] = true end
+  rednet.close = function(side)
+    if side then openSides[side] = nil else openSides = {} end
+  end
+  rednet.isOpen = function(side)
+    if side then return openSides[side] == true end
+    return next(openSides) ~= nil
+  end
+  rednet.send = function(id, message, protocol)
+    if machine.onTransmit then
+      machine.onTransmit(id, textutils.serialise(message), protocol or "")
+    end
+    return true
+  end
+  rednet.broadcast = function(message, protocol)
+    if machine.onTransmit then
+      machine.onTransmit(-1, textutils.serialise(message), protocol or "")
+    end
+    return true
+  end
+  rednet.receive = function() return nil end
+  rednet.host = function() end
+  rednet.unhost = function() end
+  rednet.lookup = function() return nil end
 
   local parallel = {}
   function parallel.waitForAny(...)
@@ -586,8 +614,55 @@ function emu.build(opts)
   env.rednet = rednet
   env.parallel = parallel
   env.settings = settings
+
+  -- Redstone: an in-memory model of the six sides, so the defense system can
+  -- actually be driven and tripped from a test.
+  local rsOutput, rsInput = {}, {}
+  local rsBundledOut, rsBundledIn = {}, {}
+  local redstone = {}
+  function redstone.getSides()
+    return { "top", "bottom", "left", "right", "front", "back" }
+  end
+  function redstone.setOutput(side, on) rsOutput[side] = on and true or false end
+  function redstone.getOutput(side) return rsOutput[side] == true end
+  function redstone.getInput(side) return rsInput[side] == true end
+  function redstone.setAnalogOutput(side, value)
+    rsOutput[side] = (value or 0) > 0
+  end
+  function redstone.getAnalogOutput(side) return rsOutput[side] and 15 or 0 end
+  function redstone.getAnalogInput(side) return rsInput[side] and 15 or 0 end
+  function redstone.setBundledOutput(side, value) rsBundledOut[side] = value or 0 end
+  function redstone.getBundledOutput(side) return rsBundledOut[side] or 0 end
+  function redstone.getBundledInput(side) return rsBundledIn[side] or 0 end
+  function redstone.testBundledInput(side, mask)
+    return ((rsBundledIn[side] or 0) % (mask * 2)) >= mask
+  end
+  env.redstone = redstone
+  env.rs = redstone
+
+  --- Test hook: pretend something powered a side, and fire the event.
+  function machine.setRedstoneInput(side, on)
+    rsInput[side] = on and true or false
+    queue[#queue + 1] = table.pack("redstone")
+  end
+  function machine.getRedstoneOutput(side) return rsOutput[side] == true end
+
   env.http = opts.http or nil
-  env.bit32 = _G.bit32
+  -- CC:Tweaked ships bit32; modern Lua does not, so provide it here or the
+  -- emulator would silently exercise a different code path than the game.
+  env.bit32 = _G.bit32 or (function()
+    local chunk = load([==[
+      return {
+        band = function(a, b) return (a & b) & 0xFFFFFFFF end,
+        bor = function(a, b) return (a | b) & 0xFFFFFFFF end,
+        bxor = function(a, b) return (a ~ b) & 0xFFFFFFFF end,
+        bnot = function(a) return (~a) & 0xFFFFFFFF end,
+        lshift = function(v, n) return (v << n) & 0xFFFFFFFF end,
+        rshift = function(v, n) return (v & 0xFFFFFFFF) >> n end,
+      }
+    ]==])
+    return chunk and chunk() or nil
+  end)()
   env.table = setmetatable({ pack = table.pack, unpack = table.unpack,
                              insert = table.insert, remove = table.remove,
                              concat = table.concat, sort = table.sort }, nil)
@@ -642,7 +717,8 @@ function emu.build(opts)
 
   ----------------------------------------------------------------- driver ---
 
-  local machine = {
+  machine.env = env
+  local _machineFields = {
     env = env,
     fs = fs,
     vfs = vfs,
@@ -653,12 +729,21 @@ function emu.build(opts)
     queue = queue,
     timers = timers,
   }
+  for key, value in pairs(_machineFields) do machine[key] = value end
 
   function machine.now() return clock end
   function machine.advance(seconds) clock = clock + (seconds or 0.05) end
 
   function machine.push(...)
     queue[#queue + 1] = table.pack(...)
+  end
+
+  --- Hand this computer a frame that arrived over the wire.
+  function machine.deliverRednet(sender, serialised, protocol)
+    local message = textutils.unserialise(serialised)
+    if message == nil then return false end
+    queue[#queue + 1] = table.pack("rednet_message", sender, message, protocol)
+    return true
   end
 
   --- Pop the next event, firing any timer that is due.
@@ -692,6 +777,57 @@ function emu.build(opts)
     end
     machine.filter = type(result) == "string" and result or nil
     if coroutine.status(machine.co) == "dead" then machine.dead = true end
+    return true
+  end
+
+  --- Drain only events that are already queued, never falling forward onto a
+  --- timer.  Two machines running side by side each have their own clock, and
+  --- letting one jump ahead to its next timeout would time out a request the
+  --- other has not had a chance to answer yet.
+  function machine.pumpQueued(limit)
+    limit = limit or 50
+    local steps = 0
+    while not machine.dead and steps < limit and #queue > 0 do
+      local event = table.remove(queue, 1)
+      if machine.filter == nil or event[1] == machine.filter
+         or event[1] == "terminate" then
+        machine.advance(0.01)
+        local ok, result = coroutine.resume(machine.co, table.unpack(event, 1, event.n))
+        if not ok then
+          machine.dead = true
+          machine.error = result
+          return steps
+        end
+        machine.filter = type(result) == "string" and result or nil
+        if coroutine.status(machine.co) == "dead" then machine.dead = true end
+      end
+      steps = steps + 1
+    end
+    return steps
+  end
+
+  --- When is this machine's earliest pending timer due?  Returns nil when it
+  --- has none.  A harness running two machines uses this to fire whichever
+  --- timer is genuinely next, instead of letting one machine's clock run
+  --- ahead and time out work the other has not been scheduled to do yet.
+  function machine.nextTimer()
+    local soonest
+    for _, at in pairs(timers) do
+      if not soonest or at < soonest then soonest = at end
+    end
+    return soonest
+  end
+
+  --- Fire exactly one timer: the earliest.  Returns true if one was fired.
+  function machine.fireTimer()
+    local bestId, bestAt
+    for id, at in pairs(timers) do
+      if not bestAt or at < bestAt then bestId, bestAt = id, at end
+    end
+    if not bestId then return false end
+    timers[bestId] = nil
+    clock = math.max(clock, bestAt)
+    queue[#queue + 1] = table.pack("timer", bestId)
     return true
   end
 

@@ -1,6 +1,6 @@
 return {
   id = "monitor",
-  name = "System Monitor",
+  name = "System",
   summary = "Processes, devices, storage and the kernel log",
   keywords = "task manager processes performance log devices disk",
   category = "System",
