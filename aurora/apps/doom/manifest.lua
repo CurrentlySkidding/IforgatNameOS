@@ -1,7 +1,7 @@
 return {
   id = "doom",
-  name = "Corridor",
-  summary = "A first-person maze, raycast in real time",
+  name = "Doom",
+  summary = "Shoot your way through a raycast demon maze",
   keywords = "game 3d doom fps maze shooter first person play",
   category = "Games",
   main = "main.lua",
