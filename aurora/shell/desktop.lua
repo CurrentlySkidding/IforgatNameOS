@@ -501,11 +501,11 @@ end
 function desktop.showWindowMenu(proc, px, py)
   local win = proc.win
   desktop.showMenu({
-    { label = win.maximized and "Restore" or "Maximise", icon = "¬",
+    { label = win.maximized and "Restore" or "Maximise", icon = "\254",
       action = function() sched.maximize(proc, compositor.primary) end },
-    { label = "Minimise", icon = "",
+    { label = "Minimise", icon = "\31",
       action = function() sched.minimize(proc) end },
-    { label = "Close", icon = "", destructive = true,
+    { label = "Close", icon = "\215", destructive = true,
       action = function() sched.kill(proc, "window menu") end },
   }, px, py + 1, 14)
 end

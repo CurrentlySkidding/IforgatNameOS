@@ -192,7 +192,7 @@ end
 
 local function openMenu()
   app:menu(app.surface.w - 22, 2, {
-    { label = "Open", icon = "", accel = "^O", action = function()
+    { label = "Open", icon = "\4", accel = "^O", action = function()
         app:prompt({
           title = "Open file",
           text = state.path or (vfs.HOME .. "/"),
@@ -200,7 +200,7 @@ local function openMenu()
           onAccept = function(path) if fs.exists(path) then loadFile(path) end end,
         })
       end },
-    { label = "Save as", icon = "", action = function()
+    { label = "Save as", icon = "\4", action = function()
         app:prompt({
           title = "Save as",
           text = state.path or (vfs.HOME .. "/Untitled.txt"),
@@ -209,18 +209,18 @@ local function openMenu()
         })
       end },
     { separator = true },
-    { label = "Find", icon = "", accel = "^F", action = function() showFind(false) end },
-    { label = "Replace", icon = "", accel = "^R", action = function() showFind(true) end },
+    { label = "Find", icon = "\4", accel = "^F", action = function() showFind(false) end },
+    { label = "Replace", icon = "\4", accel = "^R", action = function() showFind(true) end },
     { separator = true },
-    { label = view.wrap and "No word wrap" or "Word wrap", icon = "",
+    { label = view.wrap and "No word wrap" or "Word wrap", icon = "\7",
       action = function()
         view.wrap = not view.wrap
         view.scrollX = 0
         app:queueDraw()
       end },
-    { label = "Run in Terminal", icon = "", action = runFile,
+    { label = "Run in Terminal", icon = "\16", action = runFile,
       disabled = state.path == nil },
-    { label = "Print", icon = "", action = function()
+    { label = "Print", icon = "\22", action = function()
         local job = printer.submit({
           title = state.path and fs.getName(state.path) or "Untitled",
           content = view:getText(),

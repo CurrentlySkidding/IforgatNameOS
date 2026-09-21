@@ -313,35 +313,35 @@ local function openMenu()
   local entry = selectedEntry()
   local inTrash = util.startsWith(state.path, vfs.TRASH)
   local items = {
-    { label = "New folder", icon = "¬", action = newFolder, accel = "^N" },
+    { label = "New folder", icon = "\254", action = newFolder, accel = "^N" },
     { separator = true },
-    { label = "Copy", icon = "", accel = "^C", disabled = entry == nil,
+    { label = "Copy", icon = "\4", accel = "^C", disabled = entry == nil,
       action = function() copySelected("copy") end },
-    { label = "Paste", icon = "", accel = "^V", action = pasteHere },
-    { label = "Rename", icon = "87", accel = "F2", disabled = entry == nil,
+    { label = "Paste", icon = "\4", accel = "^V", action = pasteHere },
+    { label = "Rename", icon = "\187", accel = "F2", disabled = entry == nil,
       action = renameSelected },
-    { label = inTrash and "Delete" or "Move to Trash", icon = "",
+    { label = inTrash and "Delete" or "Move to Trash", icon = "\233",
       destructive = true, disabled = entry == nil, action = deleteSelected },
     { separator = true },
     { label = state.view == "list" and "View as grid" or "View as list",
-      icon = "¬", action = function()
+      icon = "\254", action = function()
         state.view = state.view == "list" and "grid" or "list"
         refresh()
       end },
-    { label = "Properties", icon = "", disabled = entry == nil,
+    { label = "Properties", icon = "\4", disabled = entry == nil,
       action = showProperties },
   }
 
   -- Contextual extras, so they are only in the way when they are useful.
   if entry and not entry.isDir then
-    table.insert(items, { label = "Print", icon = "", action = function()
+    table.insert(items, { label = "Print", icon = "\22", action = function()
       local job, err = printer.printFile(entry.path)
       if job then app:notify("Sent " .. entry.name .. " to the printer", "success")
       else app:notify(err or "Print failed", "error") end
     end })
   end
   if inTrash then
-    table.insert(items, { label = "Empty trash", icon = "", destructive = true,
+    table.insert(items, { label = "Empty trash", icon = "\233", destructive = true,
       action = function()
         app:confirm({
           title = "Empty the trash?",

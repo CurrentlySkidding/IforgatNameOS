@@ -424,7 +424,7 @@ end
 
 local function openMenu()
   app:menu(app.surface.w - 22, 2, {
-    { label = "Open", icon = "", accel = "^O", action = function()
+    { label = "Open", icon = "\4", accel = "^O", action = function()
         app:prompt({
           title = "Open spreadsheet",
           text = state.path or (vfs.HOME .. "/Sheets/"),
@@ -432,7 +432,7 @@ local function openMenu()
           onAccept = function(path) if fs.exists(path) then loadSheet(path) end end,
         })
       end },
-    { label = "Save as", icon = "", action = function()
+    { label = "Save as", icon = "\4", action = function()
         app:prompt({
           title = "Save as",
           text = state.path or (vfs.HOME .. "/Sheets/Untitled.asheet"),
@@ -441,13 +441,13 @@ local function openMenu()
         })
       end },
     { separator = true },
-    { label = "Sum this column", icon = "", action = function()
+    { label = "Sum this column", icon = "\4", action = function()
         local column = formula.indexToColumn(state.col)
         setCellText(state.col, state.row,
                     ("=SUM(%s1:%s%d)"):format(column, column, math.max(1, state.row - 1)))
         refreshBar()
       end },
-    { label = "Chart a range", icon = "¬", action = function()
+    { label = "Chart a range", icon = "\254", action = function()
         app:prompt({
           title = "Chart a range",
           message = "Which cells should the chart show?",
@@ -456,7 +456,7 @@ local function openMenu()
           onAccept = buildChart,
         })
       end },
-    { label = "Column width", icon = "", action = function()
+    { label = "Column width", icon = "\4", action = function()
         app:prompt({
           title = "Width of column " .. formula.indexToColumn(state.col),
           text = tostring(widthOf(state.col)),
@@ -477,7 +477,7 @@ local function openMenu()
         util.writeFile(target, toCSV())
         app:notify("Exported " .. fs.getName(target), "success")
       end },
-    { label = "Print", icon = "", accel = "^P", action = function()
+    { label = "Print", icon = "\22", accel = "^P", action = function()
         local job = printer.submit({
           title = state.path and fs.getName(state.path) or sheet.name,
           content = toCSV():gsub(",", "  "),
@@ -485,7 +485,7 @@ local function openMenu()
         })
         app:notify("Queued \"" .. job.title .. "\"", "success")
       end },
-    { label = "Functions", icon = "", action = function()
+    { label = "Functions", icon = "\4", action = function()
         local names = {}
         for name in pairs(formula.functions) do
           if not name:match("^__") then names[#names + 1] = name end

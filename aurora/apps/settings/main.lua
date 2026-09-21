@@ -403,7 +403,7 @@ networkList:connect("activate", function(_, index, row)
       if ok then netSvc.announce() app:notify("Looking[")
       else app:notify(err or "No modem", "error") end
     end }
-    items[#items + 1] = { label = "Forget all", icon = "", destructive = true,
+    items[#items + 1] = { label = "Forget all", icon = "\233", destructive = true,
       action = function() netSvc.forgetPeers() refreshNetwork() end }
     app:menu(app.surface.w - 24, 3, items, 24)
     return
